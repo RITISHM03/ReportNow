@@ -1,0 +1,17 @@
+DATABASE_URL="mongodb+srv://user:password@cluster.mongodb.net/reportnow"
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=""
+CLOUDINARY_API_KEY=""
+CLOUDINARY_API_SECRET=""
+
+# AI Services
+GEMINI_API_KEY=""
+
+# Location Services
+NEXT_PUBLIC_HERE_API_KEY=""
+NEXT_PUBLIC_RADAR_API_KEY=""
+
+# Auth
+NEXTAUTH_SECRET=""
+NEXTAUTH_URL="http://localhost:3000"
