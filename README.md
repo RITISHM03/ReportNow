@@ -4,7 +4,6 @@
 ![EchoForms](public/HomePage.png)
 
 
-![Stars](https://img.shields.io/github/stars/10xshivam/ReportNow?style=social) ![Forks](https://img.shields.io/github/forks/10xshivam/ReportNow?style=social) ![Issues](https://img.shields.io/github/issues/10xshivam/ReportNow)
 
 
 
@@ -44,86 +43,7 @@ Beyond reporting, **ReportNow** enhances public safety by offering **real-time r
 
 ---
 
-## 📥 Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/10xshivam/ReportNow.git
-   cd ReportNow
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Set up environment variables:
-   - Copy `.env.example` to `.env`.
-   - Add required keys.
-4. **Initialize the database:**
-   ```bash
-   npx prisma migrate dev --name init
-   npx prisma generate
-   ```
-5. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
----
-
-## Docker Deployment
-   To build and deploy the application as a Docker container, use the following commands:
-   ```bash
-   docker build -t reportnow .
-   docker run -p 3000:3000 reportnow
-   ```
-
-## 🤝 Contribution Guidelines
-
-### 🌱 How to Get Involved
-
-1. **Fork the repository** by clicking the "Fork" button.
-2. **Clone your fork:**
-   ```bash
-   git clone https://github.com/10xshivam/ReportNow.git
-   ```
-3. **Create a new branch:**
-   ```bash
-   git checkout -b feature/<feature-name>
-   ```
-4. **Make changes** and commit:
-   ```bash
-   git add .
-   git commit -m "Your descriptive commit message"
-   ```
-5. **Push changes:**
-   ```bash
-   git push origin <your-branch-name>
-   ```
-6. Open a pull request.
-
-### 📌 Suggested Contributions
-
-- **Geofencing Alerts & Auto-Reporting 📍**  
-   - Notify users if they enter a **high-risk zone** based on past reports.  
-   - Auto-suggest report filing when an **incident is detected nearby**.  
-
-- **AI Chatbot for Assistance 🤖**  
-   - Implement a chatbot to **guide users through reporting**.  
-   - Offer **instant safety tips** based on the incident type.  
-
-- **Social Media Integration 📢**  
-   - Allow users to **share reports anonymously** on platforms like Twitter & Telegram.  
-   - Implement **auto-generated emergency alerts** for mass awareness.  
-
----
-
-## 🌟 Stargazers & Forkers
-
-We appreciate your support! 🌟🍴
-
-[![Stargazers](https://img.shields.io/github/stars/10xshivam/ReportNow)](https://github.com/10xshivam/ReportNow/stargazers) [![Forks](https://img.shields.io/github/forks/10xshivam/ReportNow)](https://github.com/10xshivam/ReportNow/network/members)
-
----
 
 ## 🛡 License
 
@@ -131,11 +51,3 @@ ReportNow is licensed under the MIT License.
 
 ---
 
-
-## 📬 Contact
-
-For queries or collaborations:
-
-- Email: [kumarshivam3788@gmail.com](mailto:kumarshivam3788@gmail.com)
-- LinkedIn: [codrshivam](https://www.linkedin.com/in/codrshivam/)
-- Twitter: [@shivamcodes_](https://x.com/shivamcodes_)
