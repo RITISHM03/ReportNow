@@ -35,6 +35,17 @@ import axios from "axios";
 import crypto from "crypto";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "../ui/checkbox";
+import dynamic from "next/dynamic";
+
+// Dynamically import MapLogic with SSR disabled
+const MapLogic = dynamic(() => import("../MapLogic"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[200px] flex items-center justify-center bg-gray-100 text-gray-400 rounded-lg">
+      Loading Map...
+    </div>
+  ),
+});
 
 interface ReportFormProps {
   onComplete: (data: string) => void;
@@ -47,9 +58,11 @@ const INCIDENT_TYPES = [
   "Natural Disaster",
   "Violence",
   "Other",
+  "Lost Item",
+  "Found Item",
+  "Suspicious Activity",
+  "Traffic Accident",
 ];
-
-
 
 export default function ReportForm({ onComplete }: ReportFormProps) {
   const [image, setImage] = useState<string | null>(null);
@@ -59,6 +72,9 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+
+  // State for map coordinates
+  const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
 
   const form = useForm<z.infer<typeof reportSchema>>({
     resolver: zodResolver(reportSchema),
@@ -75,7 +91,7 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
     },
   });
 
-  const { handleSubmit, control, setValue, watch } = form;
+  const { handleSubmit, control, setValue, watch, getValues } = form;
   const reportType = watch("reportType");
   const wantsNotifications = watch("wantsNotifications");
 
@@ -101,8 +117,15 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
       setValue("incidentType", data.incidentType || "");
 
       setImage(base64);
-    } catch (error) {
-      console.error("Error in analyzing image", error);
+    } catch (err: any) {
+      console.error("Error in analyzing image", err);
+      const errorMessage = err.response?.data?.error || "Failed to analyze image. Please try again or fill details manually.";
+      setError(errorMessage);
+      toast({
+        title: "Image Analysis Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
     } finally {
       setIsAnalyzing(false);
     }
@@ -113,21 +136,40 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const fetchAddress = async (lat: number, lng: number) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      );
+      const data = await response.json();
+      if (data && data.display_name) {
+        setValue("location", data.display_name);
+      } else {
+        setError("Address not found for this location.");
+      }
+    } catch (err) {
+      console.error("Error fetching address:", err);
+      setError("Failed to fetch address details.");
+    }
+  };
+
   const getLocation = async () => {
     setError("");
     setLoading(true);
+    setCoordinates(null);
+
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
-          console.log(latitude,longitude)
           setValue("latitude", latitude);
           setValue("longitude", longitude);
-          const response = await axios.post("/api/get-current-location", {
-            latitude,
-            longitude,
-          });
-          setValue("location", response.data.address);
+
+          setCoordinates({ lat: latitude, lng: longitude });
+
+          // Use OpenStreetMap Nominatim directly instead of backend API
+          await fetchAddress(latitude, longitude);
+
           setLoading(false);
         },
         (error) => {
@@ -146,8 +188,16 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
               setError("An unknown error occurred.");
               break;
           }
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
         }
       );
+    } else {
+      setLoading(false);
+      setError("Geolocation is not supported by this browser.");
     }
   };
 
@@ -168,7 +218,7 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
 
   const onSubmit = async (data: z.infer<typeof reportSchema>) => {
     setIsSubmitting(true);
-    
+
     if (data.wantsNotifications && (!data.email || data.email.trim() === "")) {
       setError("Email is required when notifications are enabled");
       toast({
@@ -179,7 +229,7 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
       setIsSubmitting(false);
       return;
     }
-    
+
     try {
       const response = await axios.post("/api/reports/create", {
         ...data,
@@ -187,14 +237,14 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
       });
       onComplete(response?.data.reportId);
     } catch (err) {
+      let displayError = "Something went wrong.";
       if (axios.isAxiosError(err) && err.response?.data?.error) {
-        setError(err.response.data.error);
-      } else {
-        setError("Something went wrong.");
+        displayError = err.response.data.error;
       }
+      setError(displayError);
       toast({
         title: "Error in submitting report",
-        description: error,
+        description: displayError,
         variant: "destructive",
       });
     } finally {
@@ -210,11 +260,10 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
           <button
             type="button"
             onClick={() => setValue("reportType", "EMERGENCY")}
-            className={`border-2 px-16 py-6 rounded-2xl ${
-              reportType === "EMERGENCY"
-                ? "bg-red-500/10 border-red-500 shadow-lg shadow-red-500/20"
-                : "border-white/10 hover:bg-red-500/10 hover:border-red-500"
-            }`}
+            className={`border-2 px-16 py-6 rounded-2xl transition-all ${reportType === "EMERGENCY"
+              ? "bg-red-500/10 border-red-500 shadow-lg shadow-red-500/20"
+              : "border-white/10 hover:bg-red-500/10 hover:border-red-500"
+              }`}
           >
             <div className="flex flex-col justify-center items-center space-y-2">
               <TriangleAlert className="text-red-500 w-8 h-8" />
@@ -227,11 +276,10 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
           <button
             type="button"
             onClick={() => setValue("reportType", "NON_EMERGENCY")}
-            className={`border-2 px-16 py-6 rounded-2xl hover: ${
-              reportType === "NON_EMERGENCY"
-                ? "bg-orange-500/10 border-orange-500 shadow-lg shadow-orange-500/20"
-                : "border-white/10"
-            } hover:bg-orange-500/10 hover:border-orange-500`}
+            className={`border-2 px-16 py-6 rounded-2xl transition-all ${reportType === "NON_EMERGENCY"
+              ? "bg-orange-500/10 border-orange-500 shadow-lg shadow-orange-500/20"
+              : "border-white/10 hover:bg-orange-500/10 hover:border-orange-500"
+              }`}
           >
             <div className="flex flex-col justify-center items-center space-y-2">
               <Info className="text-orange-500 w-8 h-8" />
@@ -243,7 +291,7 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
         <div className="relative">
           <input
             type="file"
-            accept="/image*"
+            accept="image/*"
             onChange={handleImageUpload}
             id="image-upload"
             className="hidden"
@@ -251,7 +299,7 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
           />
           <label
             htmlFor="image-upload"
-            className={`border-2 px-8 py-8 w-full block rounded-lg border-dashed border-white/10 hover:border-sky-400/50 hover:bg-sky-400/10 
+            className={`border-2 px-8 py-8 w-full block rounded-lg border-dashed border-white/10 hover:border-sky-400/50 hover:bg-sky-400/10 transition-colors
             ${image && "border-sky-400/50 bg-sky-400/10"}`}
           >
             {!image ? (
@@ -262,28 +310,29 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
                 </span>
               </div>
             ) : (
-              <div className="flex justify-center items-center ">
+              <div className="flex justify-center items-center relative">
                 <div
-                  className="absolute top-4 right-4 bg-zinc-600 p-1 rounded-full hover:bg-zinc-700"
+                  className="absolute top-2 right-2 bg-zinc-800 p-2 rounded-full hover:bg-zinc-700 cursor-pointer z-10"
                   onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     removeImage();
                   }}
                 >
-                  <X className="text-sky-500 w-5 h-5" />
+                  <X className="text-white w-5 h-5" />
                 </div>
                 <Image
                   src={image}
                   alt="Uploaded image"
                   width={500}
                   height={500}
-                  className="rounded-xl"
+                  className="rounded-xl object-cover max-h-[300px]"
                 />
               </div>
             )}
           </label>
           {isAnalyzing && (
-            <div className="absolute inset-0 bg-black/70 rounded-lg flex justify-center items-center">
+            <div className="absolute inset-0 bg-black/70 rounded-lg flex justify-center items-center z-20">
               <div className="flex justify-center items-center gap-2">
                 <LoaderCircle className="text-sky-500 animate-spin h-5 w-5" />
                 <span className="text-sky-500 font-medium">
@@ -301,7 +350,7 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
               <FormLabel>Incident Type</FormLabel>
               <FormControl>
                 <Select onValueChange={field.onChange} value={field.value}>
-                  <SelectTrigger className="w-full border-zinc-800">
+                  <SelectTrigger className="w-full border-zinc-800 bg-zinc-900/50">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -323,22 +372,33 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
             <FormItem>
               <FormLabel>Location</FormLabel>
               <FormControl>
-                <div className="relative">
-                  <Input placeholder="Enter a location or use pin" {...field} />
-                  <div
-                    className="absolute inline bg-sky-500/5 p-1.5 rounded-lg top-[7px] right-2 hover:bg-sky-500/10"
-                    onClick={getLocation}
-                  >
-                    {loading ? (
-                      <LoaderCircle className="text-sky-500 animate-spin h-5 w-5" />
-                    ) : (
-                      <MapPin className="text-sky-500 w-5 h-5" />
+                <div className="space-y-4">
+                  <div className="relative">
+                    <Input placeholder="Enter a location or use pin" {...field} className="bg-zinc-900/50 border-zinc-800" />
+                    <button
+                      type="button"
+                      className={`absolute bg-sky-500/10 p-2 rounded-lg top-[5px] right-2 hover:bg-sky-500/20 transition-colors ${loading ? 'cursor-not-allowed opacity-70' : ''}`}
+                      onClick={getLocation}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <LoaderCircle className="text-sky-500 animate-spin h-5 w-5" />
+                      ) : (
+                        <MapPin className="text-sky-500 w-5 h-5" />
+                      )}
+                    </button>
+                    {error && (
+                      <p className="text-sm text-red-500 mt-2">
+                        {error}
+                      </p>
                     )}
                   </div>
-                  {error && (
-                    <span className="text-sm text-red-500 mt-2 ml-1">
-                      {error}
-                    </span>
+
+                  {/* Map Integration */}
+                  {coordinates && (
+                    <div className="w-full h-[250px] rounded-xl overflow-hidden shadow-lg border border-zinc-700 mt-4">
+                      <MapLogic location={coordinates} />
+                    </div>
                   )}
                 </div>
               </FormControl>
@@ -352,7 +412,7 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
             <FormItem>
               <FormLabel>Report Title</FormLabel>
               <FormControl>
-                <Input placeholder="" {...field} />
+                <Input placeholder="Brief title of the incident" {...field} className="bg-zinc-900/50 border-zinc-800" />
               </FormControl>
             </FormItem>
           )}
@@ -364,17 +424,17 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
             <FormItem>
               <FormLabel>Description</FormLabel>
               <FormControl>
-                <Textarea className="h-[150px]" {...field} />
+                <Textarea className="h-[150px] bg-zinc-900/50 border-zinc-800" placeholder="Please describe what happened..." {...field} />
               </FormControl>
             </FormItem>
           )}
         />
-        
+
         <FormField
           control={control}
           name="wantsNotifications"
           render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-white/10 p-4">
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-white/10 p-4 bg-zinc-900/30">
               <FormControl>
                 <Checkbox
                   checked={field.value}
@@ -390,7 +450,7 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
             </FormItem>
           )}
         />
-        
+
         {wantsNotifications && (
           <FormField
             control={control}
@@ -403,6 +463,7 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
                     type="email"
                     placeholder="your.email@example.com"
                     {...field}
+                    className="bg-zinc-900/50 border-zinc-800"
                   />
                 </FormControl>
                 <FormDescription>
@@ -412,11 +473,11 @@ export default function ReportForm({ onComplete }: ReportFormProps) {
             )}
           />
         )}
-        
+
         <Button
           type="submit"
           disabled={isSubmitting}
-          className="group bg-gray-600 hover:bg-gray-700 w-full h-11 rounded-lg"
+          className="group bg-blue-600 hover:bg-blue-700 w-full h-11 rounded-lg transition-colors"
         >
           {isSubmitting ? (
             <>
