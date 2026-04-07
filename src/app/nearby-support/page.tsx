@@ -1,18 +1,32 @@
 "use client"
-import React, { useState,} from 'react';
+import React, { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Map, Navigation, Loader2, Hospital, Shield, Flame, Pill } from "lucide-react";
+import { AlertTriangle, Map, Navigation, Loader2, Hospital, Shield, Flame, Pill, Star } from "lucide-react";
 import Link from 'next/link';
-import { EmergencyContact, EmergencyContactType, getEmergencyContacts } from "@/lib/emergency-services";
 
-const UrgentHelp = () => {
+type ServicePlace = {
+  id: string;
+  name: string;
+  address: string;
+  rating: number | null;
+  distance: number;
+};
+
+interface NearbyServicesData {
+  police: ServicePlace[];
+  hospitals: ServicePlace[];
+  fireStations: ServicePlace[];
+  pharmacies: ServicePlace[];
+}
+
+export default function UrgentHelp() {
   const { toast } = useToast();
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
-  const [activeType, setActiveType] = useState<EmergencyContactType>('hospital');
-  const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [loading, setLoading] = useState(false);
+  const [servicesData, setServicesData] = useState<NearbyServicesData | null>(null);
+
   const getUserLocation = () => {
     setLoadingLocation(true);
     if (navigator.geolocation) {
@@ -25,7 +39,7 @@ const UrgentHelp = () => {
             title: "Location detected",
             description: "Successfully detected your location.",
           });
-          fetchContacts(latitude, longitude, activeType);
+          fetchServices(latitude, longitude);
         },
         (error) => {
           console.error("Error getting location:", error);
@@ -46,62 +60,90 @@ const UrgentHelp = () => {
       });
     }
   };
-  const fetchContacts = async (lat: number, lng: number, type: EmergencyContactType) => {
+
+  const fetchServices = async (lat: number, lng: number) => {
     setLoading(true);
     try {
-      const data = await getEmergencyContacts(lat, lng, type);
-      setContacts(data);
+      const res = await fetch(`/api/nearby-services?lat=${lat}&lng=${lng}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data: NearbyServicesData = await res.json();
+      setServicesData(data);
     } catch (error) {
-      console.error("Error fetching contacts:", error);
+      console.error("Error fetching services:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: `Failed to fetch ${type} contacts.`,
+        description: `Failed to fetch nearby services. Please try again later.`,
       });
     } finally {
       setLoading(false);
     }
   };
-  const getTypeIcon = (type: EmergencyContactType) => {
-    switch (type) {
-      case 'hospital':
-        return <Hospital className="h-5 w-5" />;
-      case 'police-station':
-        return <Shield className="h-5 w-5" />;
-      case 'fire-station':
-        return <Flame className="h-5 w-5" />;
-      case 'pharmacy':
-        return <Pill className="h-5 w-5" />;
-      default:
-        return <AlertTriangle className="h-5 w-5" />;
-    }
+
+  const renderServiceSection = (title: string, icon: React.ReactNode, items: ServicePlace[] | undefined) => {
+    return (
+      <div className="bg-gray-800/60 rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-3 flex items-center gap-2">
+          {icon} {title}
+        </h2>
+        {(!items || items.length === 0) ? (
+          <div className="py-4 text-center text-gray-500">
+            <AlertTriangle className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+            <p>No {title.toLowerCase()} found nearby.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-200/10">
+            {items.map((item) => (
+              <li key={item.id} className="py-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-1 p-2 text-purple-500 bg-gray-500/10 rounded-full">
+                    {icon}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between gap-2 max-sm:flex-col">
+                      <div>
+                        <h3 className="font-semibold text-gray-200">{item.name}</h3>
+                        <p className="text-gray-500 text-sm mt-1">{item.address}</p>
+                      </div>
+                      {item.rating && (
+                        <div className="flex items-center text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded text-sm whitespace-nowrap">
+                          <Star className="h-3 w-3 mr-1 fill-current" />
+                          <span>{item.rating}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center mt-3 text-sm text-gray-400 gap-3">
+                      <div className="flex items-center">
+                        <Map className="h-4 w-4 mr-1" />
+                        <span>{(item.distance / 1000).toFixed(2)} km away</span>
+                      </div>
+                      <a 
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.address)}`}
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-purple-400 hover:text-purple-300 hover:underline flex items-center max-md:text-xs"
+                      >
+                        <Navigation className="h-4 w-4 mr-1 " />
+                        Get Directions
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
   };
-  const getTypeName = (type: EmergencyContactType): string => {
-    switch (type) {
-      case 'hospital':
-        return 'Hospitals';
-      case 'police-station':
-        return 'Police Stations';
-      case 'fire-station':
-        return 'Fire Stations';
-      case 'pharmacy':
-        return 'Pharmacies';
-      default:
-        return 'Emergency Services';
-    }
-  };
-  const handleTypeChange = (type: EmergencyContactType) => {
-    setActiveType(type);
-    if (location) {
-      fetchContacts(location.lat, location.lng, type);
-    }
-  };
+
   return (
     <div className="min-h-screen">
       <main className="container mx-auto px-4 pt-40 pb-28 max-md:pb-20">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8 text-center">
-            <h1 className="text-4xl md:text-7xl tracking-tight font-bold mb-5">Nearby Support</h1>
+            <h1 className="text-4xl md:text-7xl tracking-tight font-bold mb-5">Nearby Emergency Support</h1>
             <p className="text-gray-500 max-w-2xl mx-auto max-md:text-sm max-md:leading-snug">
               Find emergency services near your location. Allow location access to see nearest hospitals, police stations, 
               fire stations, and pharmacies.
@@ -130,7 +172,7 @@ const UrgentHelp = () => {
               
               <Button 
                 onClick={getUserLocation} 
-                className="flex items-center gap-2 bg-accent text-white bg-purple-500"
+                className="flex items-center gap-2 bg-accent text-white bg-purple-500 hover:bg-purple-600"
                 disabled={loadingLocation}
               >
                 {loadingLocation ? (
@@ -142,85 +184,30 @@ const UrgentHelp = () => {
               </Button>
               
               {location && (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-500">
                   Your location: {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
                 </p>
               )}
             </div>
           </div>
           
-          {location && (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                {(['hospital', 'police-station', 'fire-station', 'pharmacy'] as EmergencyContactType[]).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => handleTypeChange(type)}
-                    className={`p-4 rounded-lg shadow text-center transition-colors ${
-                      activeType === type 
-                        ? 'bg-purple-600 text-white' 
-                        : 'bg-gray-600 hover:bg-gray-700 '
-                    }`}
-                  >
-                    <div className="flex flex-col items-center gap-2">
-                      {getTypeIcon(type)}
-                      <span className="font-medium">{getTypeName(type)}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              
-              <div className="bg-gray-800/60 rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-semibold mb-3 flex items-center gap-2">
-                  {getTypeIcon(activeType)} {getTypeName(activeType)} Near You
-                </h2>
-                {loading ? (
-                  <div className="flex justify-center items-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-gray-600 " />
-                    <span className="ml-2 text-gray-600">Searching for nearest {getTypeName(activeType).toLowerCase()}...</span>
-                  </div>
-                ) : contacts.length > 0 ? (
-                  <ul className="divide-y divide-gray-200/10">
-                    {contacts.map((contact, index) => (
-                      <li key={index} className="py-4">
-                        <div className="flex items-start gap-2">
-                          <div className="mt-1 p-2 text-purple-500 bg-gray-500/10 rounded-full">
-                            {getTypeIcon(activeType)}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-200">{contact.name}</h3>
-                            <p className="text-gray-500 text-sm mt-1">{contact.address}</p>
-                            <div className="flex items-center mt-2 text-sm text-gray-400">
-                              <Map className="h-4 w-4 mr-1" />
-                              <span className='max-md:text-xs'>{(contact.distance / 1000).toFixed(2)} km away</span>
-                              
-                              <a 
-                                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(contact.address)}`} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="ml-4  hover:underline flex items-center max-md:text-xs"
-                              >
-                                <Navigation className="h-4 w-4 mr-1 " />
-                                Get Directions
-                              </a>
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="py-8 text-center text-gray-500">
-                    <AlertTriangle className="h-12 w-12 mx-auto text-gray-400 mb-3" />
-                    <p>No {getTypeName(activeType).toLowerCase()} found near your location.</p>
-                    <p className="mt-2 text-sm">Try updating your location or selecting a different service.</p>
-                  </div>
-                )}
-              </div>
-            </>
+          {loading && (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+              <span className="ml-3 text-gray-400">Searching for nearby emergency services...</span>
+            </div>
           )}
-          
-          {!location && (
+
+          {!loading && servicesData && location && (
+            <div className="space-y-6">
+              {renderServiceSection("Police Stations", <Shield className="h-5 w-5" />, servicesData.police)}
+              {renderServiceSection("Hospitals", <Hospital className="h-5 w-5" />, servicesData.hospitals)}
+              {renderServiceSection("Fire Stations", <Flame className="h-5 w-5" />, servicesData.fireStations)}
+              {renderServiceSection("Pharmacies", <Pill className="h-5 w-5" />, servicesData.pharmacies)}
+            </div>
+          )}
+
+          {!location && !loading && (
             <div className="bg-gray-800/50 p-6 rounded-lg shadow-md mt-8">
               <h2 className="text-xl font-semibold mb-2">Emergency Services Information</h2>
               <p className="text-gray-500 mb-4 max-md:text-sm">
@@ -259,5 +246,4 @@ const UrgentHelp = () => {
       </main>
     </div>
   );
-};
-export default UrgentHelp;
+}
