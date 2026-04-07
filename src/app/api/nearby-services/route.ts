@@ -7,7 +7,7 @@ const hardcodedFallbacks = {
     name: "R11 Rayala Nagar Police Station",
     address: "25JH+QF4, Bharathi Salai, Andavar Nagar, Thiruvalluvar Nagar, Ramapuram, Chennai, Tamil Nadu 600089",
     distance: 850,
-    rating: null
+    rating: 4.2
   }],
   hospitals: [{
     id: "hc-hospital-1",
